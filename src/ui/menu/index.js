@@ -126,10 +126,23 @@ export function init(rootEl) {
 
   // Visibility: menu surface shows only in the 'menu' state; on re-entry the
   // persisted selection is restored so a returning player sees their loadout.
+  // Re-entry (match end → Back to menu) also re-focuses the menu: whatever had
+  // focus when play began (e.g. the Play button) was hidden with the surface,
+  // which leaves keyboard focus on document.body. The first sync is boot, not
+  // re-entry, so it must not steal focus.
+  let booted = false
   const sync = () => {
     const visible = getState() === GameStates.MENU
+    const wasHidden = rootEl.hidden
     rootEl.hidden = !visible
-    if (visible) restore()
+    if (visible) {
+      restore()
+      if (wasHidden && booted) {
+        const section = sectionSelect.hidden ? sectionConfirm : sectionSelect
+        section.querySelector('button')?.focus({ preventScroll: true })
+      }
+    }
+    booted = true
   }
   bus.on(Events.GAME_STATE, sync)
   sync()

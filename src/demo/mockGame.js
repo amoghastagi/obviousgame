@@ -6,8 +6,10 @@
  * replaces it; when that lands, delete this file and its import in main.js.
  *
  * Behavior:
- *   - on `match:start`: emits `weapon:change` from the persisted selection,
- *     then ticks every 200ms: health (damage + regen + respawn), ammo
+ *   - on `match:start`: emits `weapon:change` from the persisted selection
+ *     plus the opening health/ammo/leaderboard snapshot (so the HUD never
+ *     flashes placeholders before the first tick), then ticks every 200ms:
+ *     health (damage + regen + respawn), ammo
  *     (mag drain + reload cycles via the reloading flag), crosshair (wandering
  *     4–40 spread, spikes on shots), hit:confirm, and leaderboard:update
  *     (local player + 5 bots, churned over time, pre-sorted score-desc).
@@ -90,8 +92,13 @@ function startMatch() {
     bots: makeBots(),
   }
 
-  // The game announces the player's loadout as the match opens.
+  // The game announces the player's loadout as the match opens, with the
+  // opening readouts in the same beat — the HUD must not flash a stale
+  // "0 / 0" ammo counter or "No standings yet" before the first tick.
   bus.emit(Events.WEAPON_CHANGE, { id: weapon.id, name: weapon.name })
+  bus.emit(Events.HEALTH_UPDATE, { current: match.health, max: HEALTH_MAX })
+  bus.emit(Events.AMMO_UPDATE, { mag: match.mag, reserve: match.reserve, reloading: false })
+  emitLeaderboard(match)
 
   timer = setInterval(() => tick(match), TICK_MS)
 }

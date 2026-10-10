@@ -3,9 +3,11 @@
  *
  * Contract with the shell (main.js):
  *   - exports init(rootEl): renders into the given mount and self-manages
- *     visibility by subscribing to `game:state` (visible in 'playing' and
- *     'paused'; in 'paused' a translucent "PAUSED — press Esc" glass veil
- *     covers the frozen view). Export signature stays stable.
+ *     visibility by subscribing to `game:state` (visible for the whole match
+ *     session: 'playing' and 'paused' — where a translucent "PAUSED — press
+ *     Esc" glass veil covers the frozen view — plus 'game_over'/'victory',
+ *     where the summary modal dims + blurs it as it takes over). Export
+ *     signature stays stable.
  *   - persistent values (health / ammo / weapon / leaderboard) come from
  *     hudStore; the ephemeral crosshair + hit signals go straight over the bus.
  *   - emits no intents of its own: pause is Esc (handled by the shell) and
@@ -56,13 +58,15 @@ export function init(rootEl) {
   createWeaponPanel(mount('weapon'))
   createAmmoPanel(mount('ammo'))
 
-  // Visibility: HUD shows in 'playing' and 'paused' (it stays up under the
-  // pause veil so the frozen match keeps its readouts). The veil itself is
-  // up only while paused.
+  // Visibility: the HUD lives for the whole match session — 'playing' and
+  // 'paused' (it stays up under the pause veil so the frozen match keeps its
+  // readouts) and the match-end states, where the summary modal dims + blurs
+  // it instead of cutting to a bare backdrop. The veil itself is up only
+  // while paused.
   const pauseVeil = rootEl.querySelector('[data-hud="pause-veil"]')
   const sync = () => {
     const state = getState()
-    rootEl.hidden = state !== GameStates.PLAYING && state !== GameStates.PAUSED
+    rootEl.hidden = state === GameStates.MENU
     pauseVeil.hidden = state !== GameStates.PAUSED
   }
   bus.on(Events.GAME_STATE, sync)

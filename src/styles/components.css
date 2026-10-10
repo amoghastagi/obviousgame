@@ -134,6 +134,15 @@
     @apply text-ink underline decoration-neon-pink decoration-4 underline-offset-4;
   }
 
+  /* Keyboard focus ring for the shared buttons (menu cards carry their own).
+     Surfaces may override width/color with utilities (the modal does). */
+  .btn-neon:focus-visible,
+  .btn-neon--secondary:focus-visible,
+  .btn-neon--ghost:focus-visible {
+    outline: 3px solid var(--color-neon-cyan);
+    outline-offset: 3px;
+  }
+
   /* 1–5 stat bar. Drive with custom props:
      <div class="stat-bar" style="--stat-value: 4"></div>                     (default colors)
      <div class="stat-bar" style="--stat-value: 2; --stat-from: #ff5f6d">     (custom colors)
