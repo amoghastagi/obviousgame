@@ -32,7 +32,10 @@
 //                         Implemented by the bots module (health-reduction and
 //                         score rules are its remit). Weapons call them with
 //                         optional chaining so a missing bots module is harmless.
-//   env.spawnPoint      — THREE.Vector3 respawn location.
+//   env.spawnPoint      — THREE.Vector3 respawn location (ground level; set
+//                         by the GameHost from the arena's spawn points).
+//   env.spawnPoints     — THREE.Vector3[] ground-level spawn candidates from
+//                         the arena; bot spawners sample from these.
 //
 // Solidity convention (bridges graphics → physics): any mesh with
 // `userData.solid === true` is a static obstacle. `addSolid(env, mesh)` registers

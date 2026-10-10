@@ -6,6 +6,7 @@
 // can read getYaw()/getForward()/getRight() to drive WASD.
 
 import * as THREE from 'three'
+import { getState, GameStates } from '../../core/gameState.js'
 
 const UP = new THREE.Vector3(0, 1, 0)
 const PITCH_LIMIT = THREE.MathUtils.degToRad(85)
@@ -56,7 +57,9 @@ export class CameraRig {
 
     // Listeners are kept as fields so dispose() removes the exact same refs.
     this._onClick = () => {
-      if (this.mode !== 'fps' || this._pointerLocked) return
+      // Look input is a playing-state feature: gate pointer lock on the FSM so
+      // clicks in attract mode (menu over the live arena) never lock the cursor.
+      if (this.mode !== 'fps' || this._pointerLocked || getState() !== GameStates.PLAYING) return
       const req = this._domElement.requestPointerLock()
       // Rejects on the browser's Esc-relock cooldown; pointerlockchange stays
       // the source of truth, so the rejection carries no actionable error.
