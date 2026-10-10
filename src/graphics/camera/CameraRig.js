@@ -40,6 +40,13 @@ export class CameraRig {
     this._target = null
     this._pointerLocked = false
 
+    /**
+     * Optional callback invoked with 'fps' | 'tps' whenever the mode actually
+     * changes — the controller hides the avatar body in FPS, shows it in TPS.
+     * @type {((mode: 'fps' | 'tps') => void) | null}
+     */
+    this.onModeChange = null
+
     // Raw look input (radians) and its exponentially smoothed shadow. Both
     // modes consume the smoothed pair so toggling never jumps the view.
     this._yaw = 0
@@ -87,6 +94,15 @@ export class CameraRig {
     this._target = object3D
   }
 
+  /**
+   * Per-character FPS eye height above the target origin — wire the fruit's
+   * `userData.eyeHeight` here. Also lifts the TPS look-at point, so orbiting
+   * heads toward the character's eyes rather than a flat 1.6 default.
+   */
+  setEyeHeight(height) {
+    this.eyeHeight = height
+  }
+
   /** Feed raw pointer deltas in pixels; sensitivity is applied here. */
   applyLook(dx, dy) {
     this._yaw -= dx * this.sensitivity
@@ -95,7 +111,10 @@ export class CameraRig {
 
   /** @param {'fps'|'tps'} mode */
   setMode(mode) {
-    this.mode = mode === 'tps' ? 'tps' : 'fps'
+    const next = mode === 'tps' ? 'tps' : 'fps'
+    if (next === this.mode) return
+    this.mode = next
+    if (typeof this.onModeChange === 'function') this.onModeChange(next)
   }
 
   toggleMode() {

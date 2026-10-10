@@ -7,13 +7,16 @@
  *   - the engine env (env.js) is injected with the arena's colliders, bounds,
  *     and spawn points instead of its placeholder box room;
  *   - the UI contract (core/eventBus.js, core/gameState.js) is read directly
- *     for state; match lifecycle events are wired by later PRs in the chain.
+ *     for state; the host is the match:start subscriber (selection refresh +
+ *     fresh body). The opening beat and match-end events land in later PRs.
  *
  * This PR boots the real arena behind the menu in attract mode: a slow idle
  * camera drift over the grocery store, the selected fruit standing at a spawn
- * point, simulation gated off. Gameplay systems (physics, weapons, bots) and
- * the match director land through later PRs — they must gate on
- * `getState() === 'playing'` exactly like the drift does.
+ * point, simulation gated off. In play, the CameraRig is the sole look owner
+ * (FPS eye attach + TPS orbit) and the avatar-anchored controller moves the
+ * body. Gameplay systems (weapons, bots) and the match director land through
+ * later PRs — they must gate on `getState() === 'playing'` exactly like the
+ * physics controller does.
  */
 
 import * as THREE from 'three'
@@ -22,7 +25,9 @@ import { createGroceryArena } from '../graphics/arena/groceryArena.js'
 import { CHARACTERS as FRUIT_CAST } from '../graphics/characters/index.js'
 import { CameraRig } from '../graphics/camera/CameraRig.js'
 import { createEnv } from './env.js'
-import { loadSelection } from '../data/loadout.js'
+import { createPlayerController } from './physics.js'
+import { CHARACTERS, loadSelection } from '../data/loadout.js'
+import { bus, Events } from '../core/eventBus.js'
 import { getState, GameStates } from '../core/gameState.js'
 
 // The arena is 64×64 units; env.js's legacy placeholder bounds (±39) are wider
@@ -49,6 +54,21 @@ function castKeyFor(characterId) {
   return key
 }
 
+// Swap-related GPU cleanup: the cast factories build fresh geometries and
+// materials per instance, so a replaced avatar's GPU objects are disposed,
+// not just unparented.
+function disposeObject(root) {
+  root.traverse((obj) => {
+    obj.geometry?.dispose()
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
+    for (const material of materials) material?.dispose()
+  })
+}
+
+// Spec mapping: move speed = 4 + 0.8 × stats.speed m/s → 5.6 (tank), 7.2
+// (banana), 8.0 (scout). Max health lands with the catalog-combat PR.
+const moveSpeedFor = (stats) => 4 + 0.8 * stats.speed
+
 /**
  * Boot the GameHost into `container` (the #game-canvas layer).
  * Returns { dispose } — dispose stops the loop, releases the rig, and
@@ -62,8 +82,28 @@ export function initGame(container) {
   const arena = createGroceryArena()
   game.scene.add(arena.group)
 
-  // --- Engine env, injected with the arena's geometry --------------------------
-  const env = createEnv({ scene: game.scene, camera: game.camera, renderer: game.renderer })
+  // --- Local player avatar + engine env ----------------------------------------
+  // The avatar is created BEFORE env: env.state.player.pos aliases the avatar
+  // mesh's position (feet-anchored at ground level), so movement, respawns,
+  // and the TPS orbit all move the visible body — the camera is never the
+  // physics anchor. The boot-time selection dresses the attract-mode cast;
+  // match:start re-reads the selection so a match always uses the fruit the
+  // player actually picked in the menu (persisted before the intent fires).
+  const selectionCharacter = () => {
+    const selection = loadSelection()
+    return CHARACTERS.find((c) => c.id === selection.characterId)
+  }
+  let character = selectionCharacter()
+  let avatar = FRUIT_CAST[castKeyFor(character.id)].create()
+  avatar.position.copy(arena.spawnPoints[0])
+  game.scene.add(avatar)
+
+  const env = createEnv({
+    scene: game.scene,
+    camera: game.camera,
+    renderer: game.renderer,
+    playerAnchor: avatar,
+  })
   // Arena colliders are world-space Box3s valid for the group at identity —
   // push them straight in, plus a floor box so entities have a walkable top
   // surface at y = 0 (the arena floor itself is excluded from arena.colliders).
@@ -74,42 +114,79 @@ export function initGame(container) {
   env.world.colliders.push(...arena.colliders, floorBox)
   env.world.bounds = { ...ARENA_BOUNDS }
   // Spawn points: the arena's hand-picked, collider-checked candidates.
-  // The legacy single spawnPoint (0, 1.7, 8) was an eye-height guess from the
-  // placeholder room; respawns anchor at ground level from now on.
+  // Respawn anchors are ground level — the feet-anchored body copies them
+  // directly.
   env.spawnPoints = arena.spawnPoints
   env.spawnPoint = arena.spawnPoints[0].clone()
 
-  // --- Local player avatar + camera rig ---------------------------------------
-  // The selected fruit stands idle at a spawn point. The rig is constructed
-  // now but look input is NOT wired to the playing state yet — the next PR in
-  // the chain owns the look handoff (one look owner, ever). Until then the
-  // rig holds no camera authority: the drift below owns the menu view.
-  const selection = loadSelection()
-  const avatar = FRUIT_CAST[castKeyFor(selection.characterId)].create()
-  avatar.position.copy(arena.spawnPoints[0])
-  game.scene.add(avatar)
-
+  // --- Camera rig: the ONE look owner ------------------------------------------
+  // Pointer-lock mouse-look (FPS eye attach + TPS orbit) lives here and only
+  // here; the controller below READS the rig. Click-to-lock works in both
+  // modes and only while playing. Eye height is the selected fruit's.
   const rig = new CameraRig(game.camera, game.renderer.domElement, { mode: 'fps' })
   rig.setTarget(avatar)
+  rig.setEyeHeight(avatar.userData.eyeHeight)
 
-  // --- Attract mode -------------------------------------------------------------
-  // The menu owns the backdrop: a slow orbit over the arena. Menu state only —
-  // pause keeps the frozen scene under the veil, and playing belongs to the
-  // rig once the look PR lands. No simulation ticks anywhere in this PR.
+  // --- Player controller: rig-driven movement, avatar-anchored body ----------
+  const physics = createPlayerController(env, {
+    rig,
+    avatar,
+    moveSpeed: moveSpeedFor(character.stats),
+  })
+
+  // Rebind the avatar-derived state to a newly selected fruit: swap the mesh,
+  // re-anchor env.state.player.pos (the feet alias), refresh the rig target +
+  // eye height and the controller's catalog speed, and respawn the body.
+  function applySelection(nextCharacter) {
+    if (nextCharacter.id === character.id) return
+    game.scene.remove(avatar)
+    disposeObject(avatar)
+    character = nextCharacter
+    avatar = FRUIT_CAST[castKeyFor(character.id)].create()
+    avatar.position.copy(env.spawnPoint)
+    game.scene.add(avatar)
+    env.state.player.pos = avatar.position // re-anchor the feet alias
+    rig.setTarget(avatar)
+    rig.setEyeHeight(avatar.userData.eyeHeight)
+    physics.setAvatar(avatar, moveSpeedFor(character.stats))
+    physics.respawn()
+  }
+
+  // The host is the match:start subscriber (the mock's role, contract §2.2).
+  // The menu persists the pick to localStorage before emitting the intent, so
+  // reading it here honors what the player chose; respawn gives every match —
+  // first run or retry — a fresh body at the spawn point.
+  bus.on(Events.MATCH_START, () => {
+    applySelection(selectionCharacter())
+    physics.respawn()
+  })
+
+  // --- Attract mode + playing loop ---------------------------------------------
+  // MENU: a slow orbit over the arena (the drift owns the camera). PLAYING:
+  // the rig owns the camera and the controller moves the avatar. Every other
+  // state (paused, end states) freezes both — the renderer keeps drawing the
+  // frozen scene under the veil.
   let driftTime = Math.PI * 0.25 // start from a pleasing angle, not dead center
   game.addUpdateListener((dt) => {
-    if (getState() !== GameStates.MENU) return
-    driftTime += dt * DRIFT_RATE
-    game.camera.position.set(
-      Math.cos(driftTime) * DRIFT_RADIUS,
-      DRIFT_HEIGHT,
-      Math.sin(driftTime) * DRIFT_RADIUS,
-    )
-    game.camera.lookAt(0, 1, 0)
+    const st = getState()
+    if (st === GameStates.MENU) {
+      driftTime += dt * DRIFT_RATE
+      game.camera.position.set(
+        Math.cos(driftTime) * DRIFT_RADIUS,
+        DRIFT_HEIGHT,
+        Math.sin(driftTime) * DRIFT_RADIUS,
+      )
+      game.camera.lookAt(0, 1, 0)
+      return
+    }
+    const playing = st === GameStates.PLAYING
+    physics.update(dt, { enabled: playing }) // sim freezes under the pause veil
+    if (playing) rig.update(dt) // camera freezes too — no drift, no orbit
   })
 
   return {
     dispose() {
+      physics.dispose()
       rig.dispose()
       game.cleanup() // stops the loop, disposes GPU resources, removes the canvas
     },
