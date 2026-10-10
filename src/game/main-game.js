@@ -13,12 +13,13 @@
  *
  * In play, the CameraRig is the sole look owner (FPS eye attach + TPS orbit)
  * and the avatar-anchored controller moves the body. The weapons system is
- * catalog-driven (data/loadout.js) and the existing bots manager runs
+ * catalog-driven (data/loadout.js); the health system owns the player's
+ * catalog max, regen, and respawn. The existing bots manager runs
  * unmodified — placeholder capsules, BOT_COUNT = 3 — so the arena has
- * hittable targets and a damage source; the bots PR owns avatars, roster,
- * and scored records. Every gameplay system gates on
- * `getState() === 'playing'` via the host's tick, exactly like the physics
- * controller does.
+ * hittable targets and a fire source (its damagePlayer hook calls resolve
+ * into the health system); the bots PR owns avatars, roster, and scored
+ * records. Every gameplay system gates on `getState() === 'playing'` via
+ * the host's tick, exactly like the physics controller does.
  */
 
 import * as THREE from 'three'
@@ -29,6 +30,7 @@ import { CameraRig } from '../graphics/camera/CameraRig.js'
 import { createEnv } from './env.js'
 import { createPlayerController } from './physics.js'
 import { createWeaponSystem } from './weapons.js'
+import { createHealthSystem, maxHealthFor } from './health.js'
 import { createBotManager } from './bots.js'
 import { CHARACTERS, WEAPONS, loadSelection } from '../data/loadout.js'
 import { bus, Events } from '../core/eventBus.js'
@@ -141,15 +143,25 @@ export function initGame(container) {
   // --- Bots + weapons: the first real combat wiring ----------------------------
   // The existing bots manager runs UNMODIFIED (placeholder capsules, 3 bots):
   // it registers hittable bodies in world.targets, implements hooks.hitBot,
-  // and — until the health PR supersedes it — hooks.damagePlayer. That gives
-  // the weapon system targets to hit and a damage source to show on the HUD;
-  // the bots PR owns avatars, the 5-bot roster, and scored records.
+  // and its fire path calls hooks.damagePlayer — which the health system
+  // below owns from here on. That gives the weapon system targets to hit and
+  // a damage source to show on the HUD; the bots PR owns avatars, the 5-bot
+  // roster, and scored records.
   const bots = createBotManager(env)
   const weapons = createWeaponSystem(env, {
     weapon: selectionWeapon(),
     avatar,
     rig,
   })
+
+  // Health supersedes the bots manager's interim player-damage hook (the
+  // overwrite must come after createBotManager): catalog max, 4 HP/s regen
+  // after 2 s, 1.5 s dt-driven respawn, and health:update emissions.
+  const health = createHealthSystem(env, {
+    maxHealth: maxHealthFor(character.stats),
+    physics,
+  })
+  env.hooks.damagePlayer = health.damage
 
   // Rebind the avatar-derived state to a newly selected fruit: swap the mesh,
   // re-anchor env.state.player.pos (the feet alias), refresh the rig target +
@@ -178,8 +190,10 @@ export function initGame(container) {
     applySelection(selectionCharacter())
     physics.respawn()
     // The mock's opening beat, roster entry aside: weapon:change + ammo:update
-    // go out from equip; the leaderboard snapshot is the match director's beat.
+    // from equip, health:update from the reset; the leaderboard snapshot is
+    // the match director's beat.
     weapons.equip(selectionWeapon())
+    health.reset(maxHealthFor(selectionCharacter().stats))
   })
 
   // --- Attract mode + playing loop ---------------------------------------------
@@ -206,6 +220,7 @@ export function initGame(container) {
       rig.update(dt) // camera freezes too — no drift, no orbit
       weapons.update(dt) // firing, reload ticking, spread emission
       bots.update(dt) // wander/combat; damages the player through the hooks
+      health.update(dt) // regen + respawn clocks (dt-driven, pause-frozen)
     }
   })
 
