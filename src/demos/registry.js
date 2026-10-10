@@ -9,6 +9,7 @@ export const demos = {
   game: () => import('../game/gameDemo.js').then((m) => m.mount),
   scene: () => import('./sceneDemo.js').then((m) => m.mount),
   characters: () => import('./charactersDemo.js').then((m) => m.mount),
+  full: () => import('./fullDemo.js').then((m) => m.mount),
   camera: () => import('./cameraDemo.js').then((m) => m.mount),
 }
 
