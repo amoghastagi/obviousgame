@@ -1,4 +1,4 @@
-// src/game/bots.js — Agent C bot AI: wandering, obstacle avoidance, combat
+// src/game/bots.js — bot AI: wandering, obstacle avoidance, combat
 // engagement, and the combat rules (health, score, respawns).
 //
 // Behavior, per the env.js contract:
@@ -6,31 +6,62 @@
 //            turns toward the waypoint, with a short forward probe against
 //            world.colliders that turns the bot when blocked.
 //   COMBAT — player alive, within ENGAGE_RANGE and in line-of-sight (eye →
-//            camera ray vs world.colliders): face the player, fire every
+//            player ray vs world.colliders): face the player, fire every
 //            FIRE_INTERVAL s — at fire time, if LOS is still clear, deal 10
-//            damage via hooks.damagePlayer and draw a brief tracer.
-//   Rules  — hooks.hitBot applies damage to bots (100 hp); on death bumps
-//            score.kills, plays a ~300 ms splat, removes the mesh from
-//            world.targets and respawns after ~3 s. hooks.damagePlayer drains
-//            player health; at 0 bumps score.deaths and respawns the player
-//            after ~1.5 s (env.physics.respawn() if present, else the camera
-//            is reset to env.spawnPoint).
+//            damage via hooks.damagePlayer and draw a brief tracer. A shot
+//            that kills the player credits the firing bot's record.
+//   Rules  — hooks.hitBot applies damage to bots (100 hp); on death the bot's
+//            record counts the death, the local player's score.kills bumps,
+//            the hittable meshes leave world.targets (fire passes through),
+//            a ~300 ms splat plays, and the bot respawns after ~3 s.
+//            hooks.damagePlayer is the health system's (installed by the
+//            GameHost after this manager) — deaths and the player respawn
+//            clock belong to it.
 //
 // Each bot re-senses every frame (engaged = alive player, in range, LOS
 // clear) and runs the matching behavior, so combat exits the moment the
 // player dies or breaks sight.
 //
-// PLACEHOLDER VISUALS: capsule bodies + ink "visor" facing marker, colored
-// from PALETTE. The graphics lane owns fruit characters — swap the mesh, keep
-// the record shape (id / mesh / pos / health / alive / mode).
+// AVATARS: the GameHost injects the roster (the mock driver's five named
+// bots, round-robin over the loadout cast) and an `avatarFor(characterId)`
+// factory that builds a fruit group from the graphics lane. Every mesh in
+// the avatar is stamped { fruit, isBot, entityId } and registered as
+// hittable — the hitBot ancestor walk resolves any hit mesh to its record.
+// Movement collision uses the avatar's own hitboxRadius and LOS uses its
+// eyeHeight, so a watermelon blocks shelves wider than a strawberry.
+//
+// AI is otherwise unchanged from the placeholder-capsule era: same speeds,
+// ranges, timings, and steering — real avatars and scored records only.
 import * as THREE from 'three'
 import { PALETTE } from '../graphics/palette.js'
+import { CHARACTERS } from '../data/loadout.js'
+import { scoreOf } from './matchRules.js'
 
-// --- Tunables (placeholder balance) ----------------------------------------
-const BOT_COUNT = 3
+// --- The mock driver's roster (behavioral spec adopted by the integration
+// spec): five named bots, characters rotated one step off the loadout list —
+// Melon Musk gets the watermelon, Berry Bonds the strawberry, Citrus Cline
+// the banana. `character` is the LOADOUT id so the HUD's color mapping works
+// untouched; the GameHost maps it to a fruit mesh via avatarFor.
+export const BOT_NAMES = Object.freeze([
+  'Melon Musk',
+  'Berry Bonds',
+  'Citrus Cline',
+  'Raisin Kane',
+  'Papaya Diaz',
+])
+
+export function botRoster(count = BOT_NAMES.length) {
+  return BOT_NAMES.slice(0, count).map((name, i) => ({
+    id: `bot-${i + 1}`,
+    name,
+    character: CHARACTERS[(i + 1) % CHARACTERS.length].id,
+  }))
+}
+
+// --- Tunables (unchanged balance) -------------------------------------------
 const BOT_SPEED = 3.2 // m/s while wandering
-const BOT_RADIUS = 0.4 // XZ collision radius
-const BOT_EYE_Y = 1.4 // LOS origin height above ground
+const BOT_RADIUS = 0.4 // XZ collision radius when an avatar gives none
+const BOT_EYE_Y = 1.4 // LOS origin height when an avatar gives none
 const BOT_HEIGHT = 1.6 // body extent, used for vertical collider overlap
 const TURN_RATE = Math.PI * 1.6 // rad/s toward the current waypoint
 const AVOID_TURN = Math.PI * 0.9 // rad/s turn-in-place while blocked
@@ -43,15 +74,11 @@ const FIRE_ACQUIRE_DELAY = 0.5 // s grace before the first shot on sight
 const PLAYER_DMG = 10 // damage per bot shot
 const BOT_MAX_HEALTH = 100
 const BOT_RESPAWN_DELAY = 3 // s
-const PLAYER_RESPAWN_DELAY = 1.5 // s
 const SPLAT_TIME = 0.3 // s to flatten on death
 const TRACER_LIFE = 0.12 // s a shot tracer stays visible
 const BOUNDS_MARGIN = 1 // keep waypoints and bodies off the arena edge
 const SPAWN_CLEAR_TRIES = 24 // samples when hunting a clear spawn point
 const SPAWN_PLAYER_DIST = 10 // prefer spawn/respawn points away from the player
-const MIN_SPAWN_SPREAD = 8 // preferred spacing between simultaneous spawns
-
-const botColors = [PALETTE.strawberry, PALETTE.bananaPeel, PALETTE.melonRind]
 
 // Scratch vectors — behavior helpers are hot-path and allocation-free.
 // Usage is strictly sequential within a frame, so sharing is safe.
@@ -85,14 +112,14 @@ function bodyOverlapsY(box) {
   return box.max.y > 0.05 && box.min.y < BOT_HEIGHT
 }
 
-function pointIsClear(env, x, z) {
+function pointIsClear(env, x, z, radius = BOT_RADIUS) {
   for (const box of env.world.colliders) {
     if (!bodyOverlapsY(box)) continue
     if (
-      x > box.min.x - BOT_RADIUS &&
-      x < box.max.x + BOT_RADIUS &&
-      z > box.min.z - BOT_RADIUS &&
-      z < box.max.z + BOT_RADIUS
+      x > box.min.x - radius &&
+      x < box.max.x + radius &&
+      z > box.min.z - radius &&
+      z < box.max.z + radius
     ) {
       return false
     }
@@ -138,68 +165,122 @@ function samplePoint(env, playerDist) {
 }
 
 // Move `pos` by (dx, dz), resolving each axis against colliders expanded by
-// BOT_RADIUS (per-axis resolve per the contract). Ground units: y untouched.
-function moveWithCollision(env, pos, dx, dz) {
+// `radius` (per-axis resolve per the contract). Ground units: y untouched.
+function moveWithCollision(env, pos, dx, dz, radius) {
   const resolve = (axis, delta) => {
     if (delta === 0) return
     pos[axis] += delta
     for (const box of env.world.colliders) {
       if (!bodyOverlapsY(box)) continue
-      const inX = pos.x > box.min.x - BOT_RADIUS && pos.x < box.max.x + BOT_RADIUS
-      const inZ = pos.z > box.min.z - BOT_RADIUS && pos.z < box.max.z + BOT_RADIUS
+      const inX = pos.x > box.min.x - radius && pos.x < box.max.x + radius
+      const inZ = pos.z > box.min.z - radius && pos.z < box.max.z + radius
       if (!(inX && inZ)) continue
-      if (axis === 'x') pos.x = delta > 0 ? box.min.x - BOT_RADIUS - 0.01 : box.max.x + BOT_RADIUS + 0.01
-      else pos.z = delta > 0 ? box.min.z - BOT_RADIUS - 0.01 : box.max.z + BOT_RADIUS + 0.01
+      if (axis === 'x') pos.x = delta > 0 ? box.min.x - radius - 0.01 : box.max.x + radius + 0.01
+      else pos.z = delta > 0 ? box.min.z - radius - 0.01 : box.max.z + radius + 0.01
     }
   }
   resolve('x', dx)
   resolve('z', dz)
   const b = env.world.bounds
-  pos.x = clamp(pos.x, b.minX + BOT_RADIUS, b.maxX - BOT_RADIUS)
-  pos.z = clamp(pos.z, b.minZ + BOT_RADIUS, b.maxZ - BOT_RADIUS)
+  pos.x = clamp(pos.x, b.minX + radius, b.maxX - radius)
+  pos.z = clamp(pos.z, b.minZ + radius, b.maxZ - radius)
 }
 
-// PLACEHOLDER body: capsule + ink visor marking the facing direction (+Z).
-// The capsule is the registered hittable surface; the visor is cosmetic.
-function buildBotMesh(env, color, id) {
-  const group = new THREE.Group()
-  const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(BOT_RADIUS, BOT_HEIGHT - BOT_RADIUS * 2, 4, 12),
-    new THREE.MeshLambertMaterial({ color }),
-  )
-  body.position.y = BOT_HEIGHT / 2
-  body.castShadow = true
-  body.userData = { fruit: true, isBot: true, entityId: id }
-  group.add(body)
-
-  const visor = new THREE.Mesh(
-    new THREE.BoxGeometry(0.34, 0.12, 0.06),
-    new THREE.MeshLambertMaterial({ color: PALETTE.ink }),
-  )
-  visor.position.set(0, BOT_HEIGHT * 0.7, BOT_RADIUS - 0.02)
-  group.add(visor)
-
-  group.userData = { fruit: true, isBot: true, entityId: id }
-  env.scene.add(group)
-  return { group, body }
+// Stamp the hittable identity onto the avatar and everything inside it —
+// the group keeps its cast userData ({ character, hitboxRadius, eyeHeight }),
+// every mesh gains the isBot marker so hooks.hitBot accepts it. Returns the
+// hittable meshes (all descendants + the group itself when it is a Mesh).
+function stampAvatar(avatar, id) {
+  const meshes = []
+  avatar.traverse((node) => {
+    node.userData = { ...node.userData, fruit: true, isBot: true, entityId: id }
+    if (node.isMesh) meshes.push(node)
+  })
+  return meshes
 }
 
-export function createBotManager(env) {
+/**
+ * createBotManager(env, { roster, avatarFor }) → { update, bots, resetMatch }.
+ *
+ * `roster` — pure data: [{ id, name, character }] (botRoster() for the
+ *            mock's five). Records carry kills/deaths/score per bot.
+ * `avatarFor(characterId)` — builds a fruit avatar Group (graphics cast);
+ *            required: the cohesive app has no placeholder bodies.
+ */
+export function createBotManager(env, { roster = botRoster(), avatarFor } = {}) {
+  if (typeof avatarFor !== 'function') {
+    throw new Error('[bots] avatarFor(characterId) is required — the GameHost maps loadout ids to fruit avatars')
+  }
   const { state, hooks, world } = env
   const bots = []
   const botByMesh = new Map() // hittable mesh → record (ancestors walked on hit)
   const tracers = []
   let playerRespawnTimer = 0
 
+  // --- Spawn positions -------------------------------------------------------
+  // Initial spawn: arena spawn point index+1 — the local player holds [0]
+  // (the GameHost sets env.spawnPoint from it). Respawn: the arena point
+  // farthest from the player, so bots never pop up under the player's crosshair.
+  function spawnPositionFor(index, target) {
+    const points = env.spawnPoints
+    if (points && points.length > 0) {
+      target.copy(points[(index + 1) % points.length])
+      return target
+    }
+    target.copy(samplePoint(env, SPAWN_PLAYER_DIST))
+    return target
+  }
+
+  function respawnPosition(target) {
+    const points = env.spawnPoints
+    if (points && points.length > 0) {
+      let best = points[0]
+      let bestDist = -Infinity
+      for (const point of points) {
+        const d = point.distanceTo(state.player.pos)
+        if (d > bestDist) {
+          bestDist = d
+          best = point
+        }
+      }
+      target.copy(best)
+      return target
+    }
+    target.copy(samplePoint(env, SPAWN_PLAYER_DIST))
+    return target
+  }
+
+  function registerBot(bot) {
+    for (const mesh of bot.hitMeshes) {
+      if (world.targets.indexOf(mesh) === -1) world.targets.push(mesh)
+      botByMesh.set(mesh, bot)
+    }
+  }
+
+  function deregisterBot(bot) {
+    for (const mesh of bot.hitMeshes) {
+      const idx = world.targets.indexOf(mesh)
+      if (idx !== -1) world.targets.splice(idx, 1)
+    }
+  }
+
   // --- Spawn -----------------------------------------------------------------
-  for (let i = 0; i < BOT_COUNT; i++) {
-    const id = `bot-${i + 1}`
-    const { group, body } = buildBotMesh(env, botColors[i % botColors.length], id)
+  for (let i = 0; i < roster.length; i++) {
+    const { id, name, character } = roster[i]
+    const avatar = avatarFor(character)
+    const hitMeshes = stampAvatar(avatar, id)
     const bot = {
       id,
-      mesh: group,
-      body,
-      pos: group.position, // alias — ground level (y=0)
+      name,
+      character, // loadout id — the HUD's color mapping consumes this
+      kills: 0,
+      deaths: 0,
+      score: 0,
+      mesh: avatar, // the fruit group; origin sits at ground level
+      hitMeshes,
+      pos: avatar.position, // alias — ground level (y=0)
+      radius: avatar.userData?.hitboxRadius ?? BOT_RADIUS,
+      eyeY: avatar.userData?.eyeHeight ?? BOT_EYE_Y,
       heading: Math.random() * Math.PI * 2,
       health: BOT_MAX_HEALTH,
       alive: true,
@@ -211,15 +292,10 @@ export function createBotManager(env) {
       splatT: 0,
       respawnTimer: 0,
     }
-    // Spread initial spawns: clear of obstacles, away from the player and
-    // from each other (best-effort — the sampler degrades gracefully).
-    const p = samplePoint(env, SPAWN_PLAYER_DIST)
-    for (let attempt = 0; attempt < 6 && bots.some((b) => b.pos.distanceTo(p) < MIN_SPAWN_SPREAD); attempt++) {
-      p.copy(samplePoint(env, SPAWN_PLAYER_DIST))
-    }
-    group.position.copy(p)
-    world.targets.push(body)
-    botByMesh.set(body, bot)
+    avatar.rotation.y = bot.heading
+    spawnPositionFor(i, avatar.position)
+    env.scene.add(avatar)
+    registerBot(bot)
     bots.push(bot)
     state.bots.push(bot)
   }
@@ -230,14 +306,15 @@ export function createBotManager(env) {
     bot.health = 0
     bot.splatT = SPLAT_TIME
     bot.respawnTimer = BOT_RESPAWN_DELAY
+    bot.deaths += 1
+    bot.score = scoreOf(bot.kills, bot.deaths)
     state.score.kills += 1
     // Deregister while dead so player fire passes through.
-    const idx = world.targets.indexOf(bot.body)
-    if (idx !== -1) world.targets.splice(idx, 1)
+    deregisterBot(bot)
   }
 
   function respawnBot(bot) {
-    bot.pos.copy(samplePoint(env, SPAWN_PLAYER_DIST))
+    respawnPosition(bot.pos)
     bot.health = BOT_MAX_HEALTH
     bot.alive = true
     bot.mode = 'wander'
@@ -247,7 +324,7 @@ export function createBotManager(env) {
     bot.heading = Math.random() * Math.PI * 2
     bot.mesh.scale.set(1, 1, 1)
     bot.mesh.visible = true
-    world.targets.push(bot.body)
+    registerBot(bot)
   }
 
   // --- Hooks (combat rules live here per the contract) -----------------------
@@ -269,6 +346,8 @@ export function createBotManager(env) {
   }
 
   hooks.damagePlayer = (dmg) => {
+    // Interim hook — the GameHost installs the health system's damage over
+    // this after createBotManager; it stays only as the documented fallback.
     const player = state.player
     if (!player.alive) return
     const amount = Number.isFinite(dmg) ? dmg : 0
@@ -276,7 +355,7 @@ export function createBotManager(env) {
     if (player.health > 0) return
     player.alive = false
     state.score.deaths += 1
-    playerRespawnTimer = PLAYER_RESPAWN_DELAY
+    playerRespawnTimer = 1.5
   }
 
   // --- Behavior ----------------------------------------------------------------
@@ -305,7 +384,7 @@ export function createBotManager(env) {
 
     const desired = Math.atan2(bot.waypoint.x - bot.pos.x, bot.waypoint.z - bot.pos.z)
     bot.heading = turnToward(bot.heading, desired, TURN_RATE * dt)
-    moveWithCollision(env, bot.pos, Math.sin(bot.heading) * BOT_SPEED * dt, Math.cos(bot.heading) * BOT_SPEED * dt)
+    moveWithCollision(env, bot.pos, Math.sin(bot.heading) * BOT_SPEED * dt, Math.cos(bot.heading) * BOT_SPEED * dt, bot.radius)
   }
 
   function combatStep(bot, dt) {
@@ -320,10 +399,16 @@ export function createBotManager(env) {
     bot.fireTimer = FIRE_INTERVAL
     // Re-check at fire time: only shoot with a clear lane.
     _eye.copy(bot.pos)
-    _eye.y += BOT_EYE_Y
+    _eye.y += bot.eyeY
+    const wasAlive = player.alive
     if (!segmentBlocked(env, _eye, player.pos)) {
       hooks.damagePlayer?.(PLAYER_DMG, bot)
       spawnTracer(_eye.clone(), player.pos.clone())
+      // The kill credit: this bot's shot emptied the player's health.
+      if (wasAlive && !player.alive) {
+        bot.kills += 1
+        bot.score = scoreOf(bot.kills, bot.deaths)
+      }
     }
   }
 
@@ -351,6 +436,32 @@ export function createBotManager(env) {
     }
   }
 
+  // --- Match reset (retry / fresh match) ----------------------------------------
+  // Fresh bodies at the roster's arena spawn points, zeroed records — the
+  // match director's begin() calls this before its opening leaderboard beat.
+  function resetMatch() {
+    for (let i = 0; i < bots.length; i++) {
+      const bot = bots[i]
+      bot.kills = 0
+      bot.deaths = 0
+      bot.score = 0
+      bot.health = BOT_MAX_HEALTH
+      bot.alive = true
+      bot.mode = 'wander'
+      bot.waypoint = null
+      bot.waypointTimer = 0
+      bot.fireTimer = FIRE_ACQUIRE_DELAY
+      bot.splatT = 0
+      bot.respawnTimer = 0
+      bot.heading = Math.random() * Math.PI * 2
+      bot.mesh.scale.set(1, 1, 1)
+      bot.mesh.visible = true
+      bot.mesh.rotation.y = bot.heading
+      spawnPositionFor(i, bot.pos)
+      registerBot(bot)
+    }
+  }
+
   // --- Frame update --------------------------------------------------------------
   function update(dt) {
     const player = state.player
@@ -370,7 +481,7 @@ export function createBotManager(env) {
 
       // Sense every frame: engaged = player alive, in range, LOS clear.
       _eye.copy(bot.pos)
-      _eye.y += BOT_EYE_Y
+      _eye.y += bot.eyeY
       const engaged =
         player.alive && bot.pos.distanceTo(player.pos) <= ENGAGE_RANGE && !segmentBlocked(env, _eye, player.pos)
       if (engaged) {
@@ -403,5 +514,5 @@ export function createBotManager(env) {
     }
   }
 
-  return { update, bots }
+  return { update, bots, resetMatch }
 }

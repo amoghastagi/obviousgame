@@ -14,12 +14,11 @@
  * In play, the CameraRig is the sole look owner (FPS eye attach + TPS orbit)
  * and the avatar-anchored controller moves the body. The weapons system is
  * catalog-driven (data/loadout.js); the health system owns the player's
- * catalog max, regen, and respawn. The existing bots manager runs
- * unmodified — placeholder capsules, BOT_COUNT = 3 — so the arena has
- * hittable targets and a fire source (its damagePlayer hook calls resolve
- * into the health system); the bots PR owns avatars, roster, and scored
- * records. Every gameplay system gates on `getState() === 'playing'` via
- * the host's tick, exactly like the physics controller does.
+ * catalog max, regen, and respawn. The bots manager runs the mock driver's
+ * five-named-bot roster with real fruit avatars and scored records (the
+ * match director's leaderboard reads them). Every gameplay system gates on
+ * `getState() === 'playing'` via the host's tick, exactly like the physics
+ * controller does.
  */
 
 import * as THREE from 'three'
@@ -31,9 +30,9 @@ import { createEnv } from './env.js'
 import { createPlayerController } from './physics.js'
 import { createWeaponSystem } from './weapons.js'
 import { createHealthSystem, maxHealthFor } from './health.js'
-import { createBotManager } from './bots.js'
+import { createBotManager, botRoster } from './bots.js'
+import { createMatchDirector } from './matchDirector.js'
 import { CHARACTERS, WEAPONS, loadSelection } from '../data/loadout.js'
-import { bus, Events } from '../core/eventBus.js'
 import { getState, GameStates } from '../core/gameState.js'
 
 // Attract-mode drift: a slow full-circle orbit over the arena, menu state only.
@@ -141,13 +140,16 @@ export function initGame(container) {
   })
 
   // --- Bots + weapons: the first real combat wiring ----------------------------
-  // The existing bots manager runs UNMODIFIED (placeholder capsules, 3 bots):
-  // it registers hittable bodies in world.targets, implements hooks.hitBot,
-  // and its fire path calls hooks.damagePlayer — which the health system
-  // below owns from here on. That gives the weapon system targets to hit and
-  // a damage source to show on the HUD; the bots PR owns avatars, the 5-bot
-  // roster, and scored records.
-  const bots = createBotManager(env)
+  // The bots manager runs the mock driver's five-named-bot roster with real
+  // fruit avatars (avatarFor maps the roster's loadout ids to the cast). It
+  // registers hittable meshes in world.targets, implements hooks.hitBot, and
+  // keeps scored records (kills/deaths/score) that the match director's
+  // leaderboard reads; its fire path calls hooks.damagePlayer — which the
+  // health system below owns from here on.
+  const bots = createBotManager(env, {
+    roster: botRoster(5),
+    avatarFor: (characterId) => FRUIT_CAST[castKeyFor(characterId)].create(),
+  })
   const weapons = createWeaponSystem(env, {
     weapon: selectionWeapon(),
     avatar,
@@ -182,18 +184,23 @@ export function initGame(container) {
     physics.respawn()
   }
 
-  // The host is the match:start subscriber (the mock's role, contract §2.2).
-  // The menu persists the pick to localStorage before emitting the intent, so
-  // reading it here honors what the player chose; respawn gives every match —
-  // first run or retry — a fresh body at the spawn point.
-  bus.on(Events.MATCH_START, () => {
-    applySelection(selectionCharacter())
-    physics.respawn()
-    // The mock's opening beat, roster entry aside: weapon:change + ammo:update
-    // from equip, health:update from the reset; the leaderboard snapshot is
-    // the match director's beat.
-    weapons.equip(selectionWeapon())
-    health.reset(maxHealthFor(selectionCharacter().stats))
+  // The match director is the single match:start subscriber (the mock's
+  // role, contract §2.2) and owns the opening beat, the 60 s clock, and the
+  // end-of-match flow. The host's onMatchStart resets bodies and records —
+  // fresh state for the beat to announce. The menu persists the pick to
+  // localStorage before emitting the intent, so the director's
+  // loadSelection() reads honor what the player chose.
+  const match = createMatchDirector(env, {
+    weapons,
+    health,
+    maxHealthFor,
+    onMatchStart: () => {
+      applySelection(selectionCharacter())
+      physics.respawn()
+      bots.resetMatch()
+      env.state.score.kills = 0
+      env.state.score.deaths = 0
+    },
   })
 
   // --- Attract mode + playing loop ---------------------------------------------
@@ -221,11 +228,13 @@ export function initGame(container) {
       weapons.update(dt) // firing, reload ticking, spread emission
       bots.update(dt) // wander/combat; damages the player through the hooks
       health.update(dt) // regen + respawn clocks (dt-driven, pause-frozen)
+      match.tick(dt) // 60 s clock + leaderboard changes (pause stops the clock)
     }
   })
 
   return {
     dispose() {
+      match.dispose()
       weapons.dispose()
       physics.dispose()
       rig.dispose()

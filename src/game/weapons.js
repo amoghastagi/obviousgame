@@ -190,11 +190,17 @@ export function createWeaponSystem(env, { weapon, avatar, rig }) {
     return { onTarget, hit, end: onTarget ? hit.point.clone() : wall.point }
   }
 
-  // The bots module registers body meshes and keeps records in env.state.bots;
-  // hit.object is exactly a registered mesh (non-recursive raycast). Reading
-  // the record after hooks.hitBot yields the real kill result.
+  // The bots module stamps and registers every avatar mesh and keeps records
+  // in env.state.bots; hit.object is exactly a registered mesh (non-recursive
+  // raycast) — its record is the ancestor chain's bot (the fruit group).
   function botRecordFor(mesh) {
-    return env.state.bots.find((bot) => bot.body === mesh) ?? null
+    let node = mesh
+    while (node) {
+      const record = env.state.bots.find((bot) => bot.mesh === node)
+      if (record) return record
+      node = node.parent
+    }
+    return null
   }
 
   function fire() {
@@ -271,7 +277,11 @@ export function createWeaponSystem(env, { weapon, avatar, rig }) {
   // counters — and emit the opening weapon:change + ammo:update so the HUD
   // never flashes placeholder ammo. (Leaderboard's opening snapshot is the
   // match director's beat, not this module's.)
-  function equip(nextWeapon) {
+  // `silent` adopts the weapon without announcements — the match director
+  // emits the opening beat itself (weapon:change → health:update →
+  // ammo:update → leaderboard:update, the mock's exact order), and equip's
+  // own pair would interleave out of order.
+  function equip(nextWeapon, { silent = false } = {}) {
     weapon = nextWeapon
     params = weaponParams(weapon)
     raycaster.far = params.range
@@ -281,6 +291,7 @@ export function createWeaponSystem(env, { weapon, avatar, rig }) {
     lastSpreadPx = null
     shots = 0
     hits = 0
+    if (silent) return
     bus.emit(Events.WEAPON_CHANGE, { id: weapon.id, name: weapon.name })
     emitAmmo({ mag: weapon.ammo.mag, reserve: weapon.ammo.reserve, reloading: false })
   }
