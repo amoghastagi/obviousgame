@@ -29,12 +29,10 @@
 import './modals.css'
 import { bus, Events } from '../../core/eventBus.js'
 import { getState, GameStates } from '../../core/gameState.js'
+import { getSnapshot } from '../../core/hudStore.js'
 import { loadSelection } from '../../data/loadout.js'
 import { animateValue, cancelAllAnimations } from './countUp.js'
 import { formatClock, resolveLoadoutNames } from './format.js'
-
-/** Local player + 5 bots in the current match rules (not in the payload). */
-const MATCH_PARTICIPANTS = 6
 
 const STAT_BASE_DELAY_MS = 260
 const STAT_STAGGER_MS = 80
@@ -84,6 +82,10 @@ const statTile = ({ label, field, index, span = '', prefix = '', suffix = '' }) 
 const panelHtml = (variant, result) => {
   const summary = summaryOf(result)
   const { character, weapon } = resolveLoadoutNames(loadSelection())
+  // Roster size from the store, not a constant: the match director's final
+  // leaderboard lands here before match:end opens this modal, so the count
+  // always matches the standings the placement was computed from.
+  const rosterSize = getSnapshot().leaderboard.entries.length
   const tiles = [
     { label: 'Kills', field: 'kills', index: 1 },
     { label: 'Deaths', field: 'deaths', index: 2 },
@@ -92,7 +94,7 @@ const panelHtml = (variant, result) => {
       field: 'placement',
       index: 3,
       prefix: '<span class="text-lg">#</span>',
-      suffix: `<span class="block text-[10px] font-bold tracking-wide text-ink/50">of ${MATCH_PARTICIPANTS}</span>`,
+      suffix: `<span class="block text-[10px] font-bold tracking-wide text-ink/50">of ${rosterSize}</span>`,
     },
     { label: 'Accuracy', field: 'accuracy', index: 4, suffix: '<span class="text-base">%</span>' },
     {
