@@ -1,83 +1,69 @@
 /*
- * Fruit Shockers — HUD surface (stub).
+ * Fruit Shockers — HUD surface.
  *
  * Contract with the shell (main.js):
  *   - exports init(rootEl): renders into the given mount and self-manages
  *     visibility by subscribing to `game:state` (visible in 'playing' and
- *     'paused'). Export signature must stay stable — the real HUD replaces
- *     this file's body, not its shape.
- *   - reads game state through hudStore (health/ammo/weapon/leaderboard);
- *     high-frequency signals (crosshair, hit confirm) go via the bus directly.
+ *     'paused'; in 'paused' a translucent "PAUSED — press Esc" glass veil
+ *     covers the frozen view). Export signature stays stable.
+ *   - persistent values (health / ammo / weapon / leaderboard) come from
+ *     hudStore; the ephemeral crosshair + hit signals go straight over the bus.
+ *   - emits no intents of its own: pause is Esc (handled by the shell) and
+ *     quit lives in the modals surface.
  *
- * This stub is a minimal live readout — it exists so event flow is verifiable
- * before the real HUD lands, not a design reference.
+ * Layout (all pointer-transparent except the leaderboard collapse toggle):
+ *   top-right    leaderboard (collapsible)
+ *   bottom-left  health bar + readout
+ *   bottom-right weapon chip above the ammo counter
+ *   center       crosshair + hitmarkers
+ *   screen-space damage vignette + pause veil
  */
 
 import { bus, Events } from '../../core/eventBus.js'
 import { getState, GameStates } from '../../core/gameState.js'
-import { subscribe } from '../../core/hudStore.js'
+import './hud.css'
+import { createHealthPanel } from './healthPanel.js'
+import { createAmmoPanel } from './ammoPanel.js'
+import { createWeaponPanel } from './weaponPanel.js'
+import { createCrosshair } from './crosshair.js'
+import { createLeaderboard } from './leaderboard.js'
 
 export function init(rootEl) {
   rootEl.innerHTML = /* html */ `
-    <div class="flex h-full w-full flex-col justify-between p-4">
-      <div class="flex justify-between gap-4">
-        <div class="glass-chip surface-interactive">
-          <p class="text-[10px] font-bold uppercase tracking-[0.25em] text-ink/50">Weapon</p>
-          <p id="stub-weapon" class="font-display text-sm font-extrabold uppercase tracking-wide">—</p>
-        </div>
-        <div class="glass-chip text-center">
-          <p class="text-[10px] font-bold uppercase tracking-[0.25em] text-ink/50">HUD stub</p>
-          <p class="text-xs font-semibold text-ink/70">real HUD lands next</p>
-        </div>
-        <div class="glass-chip min-w-56 text-right">
-          <p class="text-[10px] font-bold uppercase tracking-[0.25em] text-ink/50">Leaderboard</p>
-          <ol id="stub-board" class="mt-1 space-y-0.5 text-xs font-semibold tabular-nums"></ol>
-        </div>
+    <div class="hud-readable absolute inset-0">
+      <div data-mount="leaderboard" class="absolute right-3 top-3 md:right-4 md:top-4"></div>
+      <div data-mount="health" class="absolute bottom-3 left-3 md:bottom-5 md:left-5"></div>
+      <div class="absolute bottom-3 right-3 flex flex-col items-end gap-2 md:bottom-5 md:right-5">
+        <div data-mount="weapon"></div>
+        <div data-mount="ammo"></div>
       </div>
-      <div class="flex items-end justify-between gap-4">
-        <div class="glass-chip w-64">
-          <p class="text-[10px] font-bold uppercase tracking-[0.25em] text-ink/50">Health</p>
-          <div class="stat-bar mt-1" id="stub-health-bar"></div>
-          <p id="stub-health" class="mt-1 text-xs font-bold tabular-nums">100 / 100</p>
-        </div>
-        <div class="glass-chip text-right">
-          <p class="text-[10px] font-bold uppercase tracking-[0.25em] text-ink/50">Ammo</p>
-          <p id="stub-ammo" class="font-display text-lg font-extrabold tabular-nums">—</p>
+      <div class="hud-vignette" data-hud="vignette"></div>
+      <div class="hud-pause-veil" data-hud="pause-veil" hidden>
+        <div class="glass-panel px-10 py-8 text-center">
+          <p class="display-title text-4xl">Paused</p>
+          <p class="mt-3 text-[11px] font-bold uppercase tracking-[0.3em] text-ink/60">
+            Press Esc to resume
+          </p>
         </div>
       </div>
     </div>
   `
 
-  const weaponEl = rootEl.querySelector('#stub-weapon')
-  const healthEl = rootEl.querySelector('#stub-health')
-  const healthBar = rootEl.querySelector('#stub-health-bar')
-  const ammoEl = rootEl.querySelector('#stub-ammo')
-  const boardEl = rootEl.querySelector('#stub-board')
+  const mount = (name) => rootEl.querySelector(`[data-mount="${name}"]`)
+  createCrosshair(rootEl)
+  createLeaderboard(mount('leaderboard'))
+  createHealthPanel(mount('health'), rootEl.querySelector('[data-hud="vignette"]'))
+  createWeaponPanel(mount('weapon'))
+  createAmmoPanel(mount('ammo'))
 
-  const render = (snap) => {
-    weaponEl.textContent = snap.weapon ? snap.weapon.name : '—'
-    healthEl.textContent = `${Math.round(snap.health.current)} / ${snap.health.max}`
-    healthBar.style.setProperty('--stat-value', String(Math.round((snap.health.current / snap.health.max) * 5)))
-    healthBar.style.setProperty('--stat-from', snap.health.current <= 30 ? 'var(--color-strawberry)' : 'var(--color-neon-lime)')
-    healthBar.style.setProperty('--stat-to', snap.health.current <= 30 ? 'var(--color-strawberry-deep)' : 'var(--color-neon-cyan)')
-    ammoEl.textContent = snap.ammo.reloading
-      ? 'reloading…'
-      : `${snap.ammo.mag} / ${snap.ammo.reserve}`
-    boardEl.innerHTML = snap.leaderboard.entries
-      .slice(0, 3)
-      .map((e, i) => {
-        const me = e.isLocal ? 'text-neon-pink' : 'text-ink/80'
-        return `<li class="${me}">${i + 1}. ${e.name} — ${e.score}</li>`
-      })
-      .join('')
-  }
-
-  const unsubscribe = subscribe(render)
-
-  // Visibility: HUD shows in 'playing' and 'paused' (stays up under the pause overlay).
+  // Visibility: HUD shows in 'playing' and 'paused' (it stays up under the
+  // pause veil so the frozen match keeps its readouts). The veil itself is
+  // up only while paused.
+  const pauseVeil = rootEl.querySelector('[data-hud="pause-veil"]')
   const sync = () => {
-    const s = getState()
-    rootEl.hidden = s !== GameStates.PLAYING && s !== GameStates.PAUSED
+    const state = getState()
+    rootEl.hidden = state !== GameStates.PLAYING && state !== GameStates.PAUSED
+    pauseVeil.hidden = state !== GameStates.PAUSED
   }
   bus.on(Events.GAME_STATE, sync)
   sync()
