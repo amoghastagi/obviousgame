@@ -33,9 +33,12 @@
 //   env.state.score     — { kills, deaths }
 //   env.state.bots      — bot records; the bots module populates this.
 //   env.hooks           — { hitBot(mesh, dmg), damagePlayer(dmg, source) }.
-//                         Implemented by the bots module (health-reduction and
-//                         score rules are its remit). Weapons call them with
-//                         optional chaining so a missing bots module is harmless.
+//                         hitBot is implemented by the bots module (bot health
+//                         and kill rules are its remit); damagePlayer is
+//                         implemented by the health system the GameHost installs
+//                         (catalog max, regen, respawn, health:update are the
+//                         host's remit). Weapons call them with optional
+//                         chaining so a missing implementation is harmless.
 //   env.spawnPoint      — THREE.Vector3 respawn location (ground level; set
 //                         by the GameHost from the arena's spawn points).
 //   env.spawnPoints     — THREE.Vector3[] ground-level spawn candidates from
@@ -58,7 +61,9 @@ export function createEnv({ scene, camera, renderer, playerAnchor }) {
     colliders: [],
     targets: [],
     obstacleMeshes: [],
-    bounds: { minX: -39, maxX: 39, minZ: -39, maxZ: 39 },
+    // The grocery arena is 64×64 — ±32 is the walkable truth (the legacy
+    // placeholder bounds ±39 let entities escape the floor).
+    bounds: { minX: -32, maxX: 32, minZ: -32, maxZ: 32 },
   }
   const state = {
     // pos aliases the avatar mesh's position (ground level = feet). The body
