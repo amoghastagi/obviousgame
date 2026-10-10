@@ -14,12 +14,11 @@
  * In play, the CameraRig is the sole look owner (FPS eye attach + TPS orbit)
  * and the avatar-anchored controller moves the body. The weapons system is
  * catalog-driven (data/loadout.js); the health system owns the player's
- * catalog max, regen, and respawn. The existing bots manager runs
- * unmodified — placeholder capsules, BOT_COUNT = 3 — so the arena has
- * hittable targets and a fire source (its damagePlayer hook calls resolve
- * into the health system); the bots PR owns avatars, roster, and scored
- * records. Every gameplay system gates on `getState() === 'playing'` via
- * the host's tick, exactly like the physics controller does.
+ * catalog max, regen, and respawn. The bots manager runs the mock driver's
+ * five-named-bot roster with real fruit avatars and scored records (the
+ * match director's leaderboard reads them). Every gameplay system gates on
+ * `getState() === 'playing'` via the host's tick, exactly like the physics
+ * controller does.
  */
 
 import * as THREE from 'three'
@@ -31,7 +30,7 @@ import { createEnv } from './env.js'
 import { createPlayerController } from './physics.js'
 import { createWeaponSystem } from './weapons.js'
 import { createHealthSystem, maxHealthFor } from './health.js'
-import { createBotManager } from './bots.js'
+import { createBotManager, botRoster } from './bots.js'
 import { CHARACTERS, WEAPONS, loadSelection } from '../data/loadout.js'
 import { bus, Events } from '../core/eventBus.js'
 import { getState, GameStates } from '../core/gameState.js'
@@ -141,13 +140,16 @@ export function initGame(container) {
   })
 
   // --- Bots + weapons: the first real combat wiring ----------------------------
-  // The existing bots manager runs UNMODIFIED (placeholder capsules, 3 bots):
-  // it registers hittable bodies in world.targets, implements hooks.hitBot,
-  // and its fire path calls hooks.damagePlayer — which the health system
-  // below owns from here on. That gives the weapon system targets to hit and
-  // a damage source to show on the HUD; the bots PR owns avatars, the 5-bot
-  // roster, and scored records.
-  const bots = createBotManager(env)
+  // The bots manager runs the mock driver's five-named-bot roster with real
+  // fruit avatars (avatarFor maps the roster's loadout ids to the cast). It
+  // registers hittable meshes in world.targets, implements hooks.hitBot, and
+  // keeps scored records (kills/deaths/score) that the match director's
+  // leaderboard reads; its fire path calls hooks.damagePlayer — which the
+  // health system below owns from here on.
+  const bots = createBotManager(env, {
+    roster: botRoster(5),
+    avatarFor: (characterId) => FRUIT_CAST[castKeyFor(characterId)].create(),
+  })
   const weapons = createWeaponSystem(env, {
     weapon: selectionWeapon(),
     avatar,
@@ -185,13 +187,17 @@ export function initGame(container) {
   // The host is the match:start subscriber (the mock's role, contract §2.2).
   // The menu persists the pick to localStorage before emitting the intent, so
   // reading it here honors what the player chose; respawn gives every match —
-  // first run or retry — a fresh body at the spawn point.
+  // first run or retry — a fresh body at the spawn point, and the bots get
+  // fresh records and bodies (the opening leaderboard beat is the match
+  // director's beat, landing with the director PR).
   bus.on(Events.MATCH_START, () => {
     applySelection(selectionCharacter())
     physics.respawn()
+    bots.resetMatch()
+    env.state.score.kills = 0
+    env.state.score.deaths = 0
     // The mock's opening beat, roster entry aside: weapon:change + ammo:update
-    // from equip, health:update from the reset; the leaderboard snapshot is
-    // the match director's beat.
+    // from equip, health:update from the reset.
     weapons.equip(selectionWeapon())
     health.reset(maxHealthFor(selectionCharacter().stats))
   })

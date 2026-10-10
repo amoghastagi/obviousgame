@@ -78,7 +78,18 @@ function makeEnv() {
   botBody.position.set(0, 1.6, -10)
   botBody.updateMatrixWorld(true) // raycasts read matrixWorld — the game's render loop does this every frame
   botBody.userData = { fruit: true, isBot: true, entityId: 'bot-1' }
-  const botRecord = { id: 'bot-1', body: botBody, health: 100, alive: true }
+  const botGroup = new THREE.Group()
+  botGroup.add(botBody) // record.mesh is the avatar group; the body is one hittable child
+  const botRecord = {
+    id: 'bot-1',
+    mesh: botGroup,
+    hitMeshes: [botBody],
+    health: 100,
+    alive: true,
+    kills: 0,
+    deaths: 0,
+    score: 0,
+  }
 
   const env = {
     THREE,
@@ -99,9 +110,16 @@ function makeEnv() {
     hooks: { hitBot: null, damagePlayer: null },
     spawnPoint: new THREE.Vector3(0, 0, 8),
   }
-  // Mimics bots.js's hook: damage the record; dead at ≤ 0 hp.
+  // Mimics bots.js's hook: resolve the record by walking up from the hit mesh
+  // to the avatar group, then damage; dead at ≤ 0 hp.
   env.hooks.hitBot = (mesh, dmg) => {
-    const bot = env.state.bots.find((b) => b.body === mesh)
+    if (!mesh?.userData?.isBot) return
+    let node = mesh
+    let bot = null
+    while (node && !bot) {
+      bot = env.state.bots.find((b) => b.mesh === node) ?? null
+      node = node.parent
+    }
     if (!bot || !bot.alive) return
     bot.health -= Number.isFinite(dmg) ? dmg : 0
     if (bot.health <= 0) bot.alive = false

@@ -190,11 +190,17 @@ export function createWeaponSystem(env, { weapon, avatar, rig }) {
     return { onTarget, hit, end: onTarget ? hit.point.clone() : wall.point }
   }
 
-  // The bots module registers body meshes and keeps records in env.state.bots;
-  // hit.object is exactly a registered mesh (non-recursive raycast). Reading
-  // the record after hooks.hitBot yields the real kill result.
+  // The bots module stamps and registers every avatar mesh and keeps records
+  // in env.state.bots; hit.object is exactly a registered mesh (non-recursive
+  // raycast) — its record is the ancestor chain's bot (the fruit group).
   function botRecordFor(mesh) {
-    return env.state.bots.find((bot) => bot.body === mesh) ?? null
+    let node = mesh
+    while (node) {
+      const record = env.state.bots.find((bot) => bot.mesh === node)
+      if (record) return record
+      node = node.parent
+    }
+    return null
   }
 
   function fire() {
