@@ -69,7 +69,7 @@
 
 /* Title gradient overrides (.display-title provides clip + shadow base). */
 .modal-title--victory {
-  background: linear-gradient(
+  background-image: linear-gradient(
     100deg,
     var(--color-banana) 0%,
     var(--color-banana-deep) 45%,
@@ -79,7 +79,7 @@
     drop-shadow(0 10px 24px rgba(242, 199, 68, 0.5));
 }
 .modal-title--splat {
-  background: linear-gradient(
+  background-image: linear-gradient(
     100deg,
     var(--color-melon-flesh) 0%,
     var(--color-strawberry) 50%,

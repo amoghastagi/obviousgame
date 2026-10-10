@@ -74,7 +74,7 @@ const summaryOf = (result) => ({
 
 const statTile = ({ label, field, index, span = '', prefix = '', suffix = '' }) => `
   <div class="modal-stat glass-chip px-3 py-2.5 text-left ${span}" style="--stagger-i: ${index}">
-    <dt class="text-[10px] font-bold uppercase tracking-[0.2em] text-ink/50">${label}</dt>
+    <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-ink/50">${label}</dt>
     <dd class="mt-0.5 whitespace-nowrap font-display text-2xl font-extrabold tabular-nums">
       ${prefix}<span data-field="${field}">0</span>${suffix}
     </dd>
