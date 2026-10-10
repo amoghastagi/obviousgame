@@ -164,6 +164,7 @@ export function createGameScene(container) {
   return {
     scene,
     camera,
+    renderer, // the GameHost needs the handle (env contract, rig click-to-lock)
     addUpdateListener(fn) {
       updateListeners.add(fn)
     },

@@ -58,7 +58,13 @@ export function createGroceryArena() {
     return object
   }
 
-  group.add(buildFloor()) // walkable — excluded from colliders
+  // The checker floor sits a hair above scene.js's 400x400 backdrop ground
+  // (both would otherwise be coplanar at y=0 and z-fight). The 0.02 lift is
+  // invisible at gameplay scale but kills the flicker for every consumer that
+  // stacks the arena on the shared scene foundation (the GameHost, fullDemo).
+  const floor = buildFloor() // walkable — excluded from colliders
+  floor.position.y = 0.02
+  group.add(floor)
 
   // Perimeter counter runs along two walls.
   place(counter({ length: 52 }), 0, -29.5)

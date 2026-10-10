@@ -4,9 +4,9 @@
 //   charactersDemo: characters: () => import('./charactersDemo.js').then((m) => m.mount),
 //   cameraDemo:     camera:     () => import('./cameraDemo.js').then((m) => m.mount),
 export const demos = {
-  // Agent C (Physics & Gameplay): integrated game — WASD physics, raycast
-  // shooting, bot AI. Placeholder arena until the graphics demos land.
-  game: () => import('../game/gameDemo.js').then((m) => m.mount),
+  // ?demo=game boots the real GameHost — the same host as the default boot
+  // path, wrapped in the gallery's mount contract.
+  game: () => import('../game/main-game.js').then((m) => m.mount),
   scene: () => import('./sceneDemo.js').then((m) => m.mount),
   characters: () => import('./charactersDemo.js').then((m) => m.mount),
   full: () => import('./fullDemo.js').then((m) => m.mount),

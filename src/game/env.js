@@ -1,19 +1,19 @@
 // src/game/env.js — Agent C (Physics & Gameplay Mechanics) system contract.
 //
-// One `env` object is created by gameDemo.js and handed to every gameplay
-// system. Gameplay sub-agents implement exactly ONE file each:
+// One `env` object is created by the GameHost (main-game.js) and handed to
+// every gameplay system. Gameplay sub-agents implement exactly ONE file each:
 //
 //   src/game/physics.js → export function createPlayerController(env)
 //   src/game/weapons.js → export function createWeaponSystem(env)
 //   src/game/bots.js    → export function createBotManager(env)
 //
-// Each factory returns at least `{ update(dt) }`; the main loop calls it every
-// frame. Systems are loaded dynamically and must tolerate the other files not
-// existing yet (missing modules are skipped with a console warning).
+// Each factory returns at least `{ update(dt) }`; the GameHost's update loop
+// calls it every frame.
 //
 // Contract:
 //   env.THREE           — the three module
-//   env.scene           — THREE.Scene (placeholder arena until graphics lands)
+//   env.scene           — THREE.Scene (the graphics lane's shared scene; the
+//                         GameHost adds the grocery arena to it)
 //   env.camera          — THREE.PerspectiveCamera, first-person; physics moves it
 //   env.renderer        — THREE.WebGLRenderer
 //   env.world.colliders — THREE.Box3[] static AABBs (floor + obstacles). Use for
@@ -32,7 +32,10 @@
 //                         Implemented by the bots module (health-reduction and
 //                         score rules are its remit). Weapons call them with
 //                         optional chaining so a missing bots module is harmless.
-//   env.spawnPoint      — THREE.Vector3 respawn location.
+//   env.spawnPoint      — THREE.Vector3 respawn location (ground level; set
+//                         by the GameHost from the arena's spawn points).
+//   env.spawnPoints     — THREE.Vector3[] ground-level spawn candidates from
+//                         the arena; bot spawners sample from these.
 //
 // Solidity convention (bridges graphics → physics): any mesh with
 // `userData.solid === true` is a static obstacle. `addSolid(env, mesh)` registers
