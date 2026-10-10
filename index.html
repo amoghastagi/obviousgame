@@ -4,23 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fruit Shockers</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        height: 100%;
-        overflow: hidden;
-        background: #1d1626;
-        font-family: system-ui, sans-serif;
-      }
-      #app {
-        position: fixed;
-        inset: 0;
-      }
-    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- Layer 0: the 3D canvas mounts here later; today it is a pastel gradient placeholder.
+         With ?demo=<key> in the URL, the graphics demo registry mounts into it instead. -->
+    <div id="game-canvas" class="page-backdrop" aria-hidden="true"></div>
+
+    <!-- UI surface roots. Each surface stub toggles the `hidden` attribute on its root
+         as the game state changes; roots are pointer-transparent so the game keeps input. -->
+    <div id="hud-root" class="surface-root z-10" hidden></div>
+    <div id="menu-root" class="surface-root z-20" hidden></div>
+    <div id="modal-root" class="surface-root z-30" hidden></div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

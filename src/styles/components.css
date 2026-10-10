@@ -1,0 +1,177 @@
+/*
+ * Fruit Shockers — glassmorphism component utilities (Tailwind v4).
+ *
+ * The shared look every surface consumes. Use these classes instead of
+ * re-rolling blur/gradient styles per surface; combine freely with plain
+ * Tailwind utilities (layout, spacing, text sizes).
+ *
+ * Utility reference:
+ * ─────────────────────────────────────────────────────────────────────────
+ * .page-backdrop        Pastel grocery-store gradient. Already applied to
+ *                       #game-canvas in index.html; reuse for any
+ *                       full-bleed surface that must stand alone.
+ * .surface-root         Fullscreen mount layer for a UI surface root
+ *                       (pointer-transparent; re-enable with .surface-interactive
+ *                       on the panel inside).
+ * .glass-panel          Frosted-glass panel: backdrop blur, translucent fill,
+ *                       1px light border, generous rounding. The workhorse.
+ * .glass-chip           Compact frosted chip for HUD readouts and badges.
+ * .display-title        Game-title typography: heavy, uppercase, pastel
+ *                       gradient fill with ink offset shadow + neon glow.
+ * .btn-neon             Primary neon button (lime→cyan gradient, glow, ink text).
+ * .btn-neon--secondary  Secondary: frosted glass with cyan neon border/text.
+ * .btn-neon--ghost      Ghost: transparent, ink text, underline on hover.
+ * .stat-bar             1–5 stat track for character/weapon stats. Set the
+ *                       value with `style="--stat-value: 4"`; recolor with
+ *                       `--stat-from` / `--stat-to` (any CSS color).
+ *                       <div class="stat-bar" style="--stat-value: 4"></div>
+ * ─────────────────────────────────────────────────────────────────────────
+ * Character accent colors come from the token layer (tokens.css):
+ * banana / banana-deep, melon-rind / melon-deep / melon-flesh,
+ * strawberry / strawberry-deep, neon-pink / neon-lime / neon-cyan, ink.
+ */
+@layer components {
+  /* Fullscreen pastel backdrop — layered radial "produce-section" glow over cream. */
+  .page-backdrop {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background:
+      radial-gradient(42rem 42rem at 12% 18%, rgba(158, 221, 142, 0.5), transparent 65%),
+      radial-gradient(38rem 38rem at 85% 12%, rgba(255, 224, 102, 0.55), transparent 65%),
+      radial-gradient(40rem 40rem at 78% 82%, rgba(253, 100, 112, 0.32), transparent 62%),
+      radial-gradient(46rem 46rem at 18% 88%, rgba(79, 232, 255, 0.3), transparent 65%),
+      linear-gradient(160deg, #fdf3e7 0%, #fdeef2 48%, #eaf7ec 100%);
+  }
+
+  /* Fullscreen mount layer; pointer-transparent so the game canvas keeps input.
+     Add .surface-interactive to the panel inside to opt back into clicks. */
+  .surface-root {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+  }
+  .surface-root[hidden] {
+    display: none;
+  }
+  .surface-interactive {
+    pointer-events: auto;
+  }
+
+  /* Frosted-glass panel. */
+  .glass-panel {
+    @apply rounded-3xl border border-white/60 bg-white/55 shadow-2xl backdrop-blur-xl;
+    box-shadow:
+      0 24px 60px rgba(58, 46, 57, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  }
+
+  /* Compact frosted chip — HUD readouts, badges, captions. */
+  .glass-chip {
+    @apply rounded-2xl border border-white/55 bg-white/45 px-4 py-2 backdrop-blur-md;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  /* Display typography — gradient fill over a chunky ink offset, neon bloom. */
+  .display-title {
+    @apply font-display uppercase;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    line-height: 1.05;
+    background: linear-gradient(
+      100deg,
+      var(--color-banana) 0%,
+      var(--color-strawberry) 55%,
+      var(--color-neon-pink) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 3px 0 rgba(58, 46, 57, 0.9))
+      drop-shadow(0 10px 24px rgba(255, 79, 163, 0.35));
+  }
+
+  /* Neon buttons — base (primary), secondary, ghost. */
+  .btn-neon {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/40
+      px-6 py-3 font-display text-sm font-extrabold uppercase tracking-widest text-ink
+      transition-transform duration-150 select-none;
+    background: linear-gradient(120deg, var(--color-neon-lime) 0%, var(--color-neon-cyan) 100%);
+    box-shadow:
+      0 0 0 1px rgba(58, 46, 57, 0.85),
+      0 6px 0 rgba(58, 46, 57, 0.85),
+      0 14px 30px rgba(79, 232, 255, 0.4);
+  }
+  .btn-neon:hover {
+    transform: translateY(-2px);
+  }
+  .btn-neon:active {
+    transform: translateY(2px);
+    box-shadow:
+      0 0 0 1px rgba(58, 46, 57, 0.85),
+      0 2px 0 rgba(58, 46, 57, 0.85),
+      0 8px 18px rgba(79, 232, 255, 0.35);
+  }
+
+  .btn-neon--secondary {
+    /* Plain `background` (not @apply bg-*) so it overrides the base gradient. */
+    background: rgba(255, 255, 255, 0.45);
+    @apply border border-neon-cyan/80 text-ink backdrop-blur-md;
+    box-shadow:
+      0 0 0 1px rgba(58, 46, 57, 0.6),
+      0 6px 20px rgba(79, 232, 255, 0.25);
+  }
+  .btn-neon--secondary:hover {
+    background: rgba(79, 232, 255, 0.18);
+  }
+
+  .btn-neon--ghost {
+    @apply cursor-pointer rounded-2xl border border-transparent bg-transparent px-6 py-3
+      font-display text-sm font-bold uppercase tracking-widest text-ink/70 transition-colors select-none;
+    box-shadow: none;
+  }
+  .btn-neon--ghost:hover {
+    @apply text-ink underline decoration-neon-pink decoration-4 underline-offset-4;
+  }
+
+  /* 1–5 stat bar. Drive with custom props:
+     <div class="stat-bar" style="--stat-value: 4"></div>                     (default colors)
+     <div class="stat-bar" style="--stat-value: 2; --stat-from: #ff5f6d">     (custom colors)
+  */
+  .stat-bar {
+    --stat-value: 0;
+    --stat-from: var(--color-neon-lime);
+    --stat-to: var(--color-neon-cyan);
+    position: relative;
+    height: 0.75rem;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 9999px;
+    border: 1px solid rgba(58, 46, 57, 0.25);
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 1px 3px rgba(58, 46, 57, 0.15);
+  }
+  .stat-bar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: calc(var(--stat-value, 0) / 5 * 100%);
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--stat-from), var(--stat-to));
+    transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  /* Five segment notches over the fill. */
+  .stat-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent calc(20% - 2px),
+      rgba(58, 46, 57, 0.22) calc(20% - 2px),
+      rgba(58, 46, 57, 0.22) 20%
+    );
+  }
+}
