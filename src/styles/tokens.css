@@ -1,0 +1,38 @@
+/*
+ * Fruit Shockers — design tokens (Tailwind v4 `@theme`).
+ *
+ * Color values mirror src/graphics/palette.js so the UI layer and the 3D layer
+ * stay visually identical; palette.js remains the source of truth for graphics
+ * modules, these custom properties are its CSS twin for Tailwind utilities.
+ * Use them as regular Tailwind color utilities: bg-banana, text-neon-pink,
+ * border-strawberry, etc.
+ */
+@theme {
+  /* Banana Commando */
+  --color-banana: #ffe066;
+  --color-banana-deep: #f2c744;
+
+  /* Watermelon Tank */
+  --color-melon-rind: #9edd8e;
+  --color-melon-deep: #3f8f5f;
+  --color-melon-flesh: #fd6470;
+
+  /* Strawberry Scout */
+  --color-strawberry: #ff5f6d;
+  --color-strawberry-deep: #e04a5e;
+
+  /* Neon accents */
+  --color-neon-pink: #ff4fa3;
+  --color-neon-lime: #b6ff4f;
+  --color-neon-cyan: #4fe8ff;
+
+  /* Ink (outlines/body text) and cream page base */
+  --color-ink: #3a2e39;
+  --color-cream: #fdf3e7;
+
+  /* Typography: heavy display stack for titles (no webfont download). */
+  --font-display: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  --font-body: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --font-sans: var(--font-body);
+}

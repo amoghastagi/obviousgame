@@ -1,0 +1,24 @@
+/*
+ * Fruit Shockers — stylesheet entry.
+ *
+ * Layer order:
+ *   1. tokens.css      — Tailwind @theme color/font tokens (CSS twin of src/graphics/palette.js)
+ *   2. components.css  — reusable glassmorphism utilities (.glass-panel, .btn-neon, .stat-bar, ...)
+ *
+ * Import with a single line in any entry file:  import './styles/main.css'
+ */
+@import 'tailwindcss';
+@import './tokens.css';
+@import './components.css';
+
+/* Full-bleed app: the page never scrolls; surfaces overlay the canvas layer. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+body {
+  font-family: var(--font-body);
+  color: var(--color-ink);
+}
