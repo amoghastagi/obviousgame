@@ -59,7 +59,8 @@ export class CameraRig {
     this._onClick = () => {
       // Look input is a playing-state feature: gate pointer lock on the FSM so
       // clicks in attract mode (menu over the live arena) never lock the cursor.
-      if (this.mode !== 'fps' || this._pointerLocked || getState() !== GameStates.PLAYING) return
+      // Both modes lock — TPS orbits the camera from the same smoothed look.
+      if (this._pointerLocked || getState() !== GameStates.PLAYING) return
       const req = this._domElement.requestPointerLock()
       // Rejects on the browser's Esc-relock cooldown; pointerlockchange stays
       // the source of truth, so the rejection carries no actionable error.
