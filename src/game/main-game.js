@@ -31,8 +31,8 @@ import { createPlayerController } from './physics.js'
 import { createWeaponSystem } from './weapons.js'
 import { createHealthSystem, maxHealthFor } from './health.js'
 import { createBotManager, botRoster } from './bots.js'
+import { createMatchDirector } from './matchDirector.js'
 import { CHARACTERS, WEAPONS, loadSelection } from '../data/loadout.js'
-import { bus, Events } from '../core/eventBus.js'
 import { getState, GameStates } from '../core/gameState.js'
 
 // Attract-mode drift: a slow full-circle orbit over the arena, menu state only.
@@ -184,22 +184,23 @@ export function initGame(container) {
     physics.respawn()
   }
 
-  // The host is the match:start subscriber (the mock's role, contract §2.2).
-  // The menu persists the pick to localStorage before emitting the intent, so
-  // reading it here honors what the player chose; respawn gives every match —
-  // first run or retry — a fresh body at the spawn point, and the bots get
-  // fresh records and bodies (the opening leaderboard beat is the match
-  // director's beat, landing with the director PR).
-  bus.on(Events.MATCH_START, () => {
-    applySelection(selectionCharacter())
-    physics.respawn()
-    bots.resetMatch()
-    env.state.score.kills = 0
-    env.state.score.deaths = 0
-    // The mock's opening beat, roster entry aside: weapon:change + ammo:update
-    // from equip, health:update from the reset.
-    weapons.equip(selectionWeapon())
-    health.reset(maxHealthFor(selectionCharacter().stats))
+  // The match director is the single match:start subscriber (the mock's
+  // role, contract §2.2) and owns the opening beat, the 60 s clock, and the
+  // end-of-match flow. The host's onMatchStart resets bodies and records —
+  // fresh state for the beat to announce. The menu persists the pick to
+  // localStorage before emitting the intent, so the director's
+  // loadSelection() reads honor what the player chose.
+  const match = createMatchDirector(env, {
+    weapons,
+    health,
+    maxHealthFor,
+    onMatchStart: () => {
+      applySelection(selectionCharacter())
+      physics.respawn()
+      bots.resetMatch()
+      env.state.score.kills = 0
+      env.state.score.deaths = 0
+    },
   })
 
   // --- Attract mode + playing loop ---------------------------------------------
@@ -227,11 +228,13 @@ export function initGame(container) {
       weapons.update(dt) // firing, reload ticking, spread emission
       bots.update(dt) // wander/combat; damages the player through the hooks
       health.update(dt) // regen + respawn clocks (dt-driven, pause-frozen)
+      match.tick(dt) // 60 s clock + leaderboard changes (pause stops the clock)
     }
   })
 
   return {
     dispose() {
+      match.dispose()
       weapons.dispose()
       physics.dispose()
       rig.dispose()

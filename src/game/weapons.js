@@ -277,7 +277,11 @@ export function createWeaponSystem(env, { weapon, avatar, rig }) {
   // counters — and emit the opening weapon:change + ammo:update so the HUD
   // never flashes placeholder ammo. (Leaderboard's opening snapshot is the
   // match director's beat, not this module's.)
-  function equip(nextWeapon) {
+  // `silent` adopts the weapon without announcements — the match director
+  // emits the opening beat itself (weapon:change → health:update →
+  // ammo:update → leaderboard:update, the mock's exact order), and equip's
+  // own pair would interleave out of order.
+  function equip(nextWeapon, { silent = false } = {}) {
     weapon = nextWeapon
     params = weaponParams(weapon)
     raycaster.far = params.range
@@ -287,6 +291,7 @@ export function createWeaponSystem(env, { weapon, avatar, rig }) {
     lastSpreadPx = null
     shots = 0
     hits = 0
+    if (silent) return
     bus.emit(Events.WEAPON_CHANGE, { id: weapon.id, name: weapon.name })
     emitAmmo({ mag: weapon.ammo.mag, reserve: weapon.ammo.reserve, reloading: false })
   }
