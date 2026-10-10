@@ -1,0 +1,99 @@
+/*
+ * Fruit Shockers — MENU surface styles.
+ *
+ * Only what the shared design system (components.css) doesn't cover: the
+ * animated title sheen, card lift/selected treatment, and fruit orbs. Accent
+ * colors are passed per card through --accent-from / --accent-to custom
+ * properties (set in view.js from design tokens).
+ */
+
+/* Animated sheen: a white highlight layer swept across the clipped title text
+   (two classes outrank .display-title's background, so the pastel layer stays). */
+.display-title.title-sheen {
+  background-image:
+    linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.9) 50%, transparent 62%),
+    linear-gradient(100deg, var(--color-banana) 0%, var(--color-strawberry) 55%, var(--color-neon-pink) 100%);
+  background-size: 240% 100%, 100% 100%;
+  background-position: 100% 0, 0 0;
+  animation: menu-title-sheen 6s ease-in-out infinite;
+}
+
+@keyframes menu-title-sheen {
+  0% {
+    background-position: 100% 0, 0 0;
+  }
+  55% {
+    background-position: -40% 0, 0 0;
+  }
+  100% {
+    background-position: -40% 0, 0 0;
+  }
+}
+
+/* Card hover lift + focus ring (cards are real <button>s). */
+.menu-card {
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+.menu-card:hover {
+  transform: translateY(-5px);
+}
+.menu-card:focus-visible {
+  outline: 3px solid var(--color-neon-cyan);
+  outline-offset: 3px;
+}
+
+/* Selected: accent glow ring + visible chip. */
+.menu-card.is-selected {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 0 0 3px var(--accent-to),
+    0 0 36px color-mix(in srgb, var(--accent-to) 50%, transparent),
+    0 24px 60px rgba(58, 46, 57, 0.16);
+}
+
+.select-chip {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  align-items: center;
+  padding: 0.3rem 0.6rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(58, 46, 57, 0.7);
+  background: linear-gradient(120deg, var(--accent-from), var(--accent-to));
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent-to) 60%, transparent);
+}
+.menu-card.is-selected .select-chip {
+  display: inline-flex;
+}
+
+/* Soft gradient orb standing in for the character portrait. */
+.fruit-orb {
+  display: inline-block;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 9999px;
+  border: 2px solid rgba(58, 46, 57, 0.8);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.75) 0 14%, transparent 42%),
+    linear-gradient(140deg, var(--accent-from), var(--accent-to));
+  box-shadow:
+    0 6px 18px color-mix(in srgb, var(--accent-to) 50%, transparent),
+    inset 0 -4px 8px rgba(58, 46, 57, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .display-title.title-sheen {
+    animation: none;
+  }
+  .menu-card {
+    transition: none;
+  }
+}
