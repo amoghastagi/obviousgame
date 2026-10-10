@@ -92,7 +92,7 @@ const panelHtml = (variant, result) => {
       field: 'placement',
       index: 3,
       prefix: '<span class="text-lg">#</span>',
-      suffix: ` <span class="text-xs font-bold text-ink/50">of ${MATCH_PARTICIPANTS}</span>`,
+      suffix: `<span class="block text-[10px] font-bold tracking-wide text-ink/50">of ${MATCH_PARTICIPANTS}</span>`,
     },
     { label: 'Accuracy', field: 'accuracy', index: 4, suffix: '<span class="text-base">%</span>' },
     {
