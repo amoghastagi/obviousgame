@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { PALETTE } from '../graphics/palette.js'
 import { CHARACTERS } from '../graphics/characters/index.js'
-import { cerealBox, counter, cuttingBoard, milkCarton } from '../graphics/arena/props.js'
+import { COUNTER_TOP, cerealBox, counter, cuttingBoard, milkCarton } from '../graphics/arena/props.js'
 
 // Self-contained characters demo: own renderer, lights and floor (deliberately
 // NOT src/graphics/scene.js — that module is owned by another task). Shows the

@@ -12,7 +12,8 @@ const flatMat = (extra = {}) => new THREE.MeshLambertMaterial({ flatShading: tru
 export function createWatermelon() {
   const group = new THREE.Group()
 
-  const geometry = new THREE.IcosahedronGeometry(0.72, 1)
+  // Detail 2 keeps the vertical stripes readable as bands at arcade distance.
+  const geometry = new THREE.IcosahedronGeometry(0.72, 2)
   geometry.scale(1.15, 0.9, 1.15)
 
   const position = geometry.getAttribute('position')

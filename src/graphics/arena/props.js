@@ -48,8 +48,12 @@ export function cuttingBoard({ width = 1.9, depth = 1.15, thickness = 0.1 } = {}
   return group
 }
 
+// Counter runs are `COUNTER_TOP` tall — props that sit on a counter (boards,
+// cartons, small boxes) should be placed at this y.
+export const COUNTER_TOP = 2
+
 // Counter run: pastel body with a lighter overhanging top slab.
-export function counter({ length = 8, depth = 2, height = 2 } = {}) {
+export function counter({ length = 8, depth = 2, height = COUNTER_TOP } = {}) {
   const group = new THREE.Group()
 
   const body = solidMesh(new THREE.BoxGeometry(length, height - 0.16, depth), PALETTE.counterBody)

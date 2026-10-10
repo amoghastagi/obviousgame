@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { PALETTE } from '../palette.js'
-import { cerealBox, counter, cuttingBoard, milkCarton, shelf } from './props.js'
+import { COUNTER_TOP, cerealBox, counter, cuttingBoard, milkCarton, shelf } from './props.js'
 
 // Grocery-store arena: pastel checker floor, perimeter counters along two
 // walls, giant cereal-box cover walls, counter-top clutter, and shelf units.
@@ -10,7 +10,6 @@ import { cerealBox, counter, cuttingBoard, milkCarton, shelf } from './props.js'
 
 const ARENA_SIZE = 64
 const CELL = 4
-const COUNTER_TOP = 2.0
 
 // One vertex-colored checker plane, 4-unit cells.
 function buildFloor() {

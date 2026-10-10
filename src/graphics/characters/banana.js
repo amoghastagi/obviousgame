@@ -113,26 +113,21 @@ export function createBanana() {
   const stemDir = spine.getTangentAt(0).negate()
   const tipDir = spine.getTangentAt(1)
 
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 0.34, 6), flatMat({ color: PALETTE.stem }))
-  stem.position.copy(stemEnd).addScaledVector(stemDir, 0.1)
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 0.3, 6), flatMat({ color: PALETTE.stem }))
+  stem.position.copy(stemEnd).addScaledVector(stemDir, 0.06)
   stem.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), stemDir)
   stem.castShadow = true
 
   const tip = new THREE.Mesh(new THREE.SphereGeometry(0.085, 6, 5), flatMat({ color: PALETTE.stem }))
-  tip.position.copy(tipEnd).addScaledVector(tipDir, 0.05)
+  tip.position.copy(tipEnd).addScaledVector(tipDir, 0.015)
   tip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tipDir)
-  tip.scale.set(1, 1.4, 1)
+  tip.scale.set(1, 1.3, 1)
   tip.castShadow = true
 
   group.add(stem, tip)
 
-  // Rest the whole character on its lowest point (the stem leans past y = 0).
-  const bounds = new THREE.Box3()
-  group.children.forEach((child) => {
-    child.geometry.computeBoundingBox()
-    bounds.union(child.geometry.boundingBox)
-  })
-  group.children.forEach((child) => child.geometry.translate(0, -bounds.min.y, 0))
+  // The body mesh is already grounded at y = 0; the stem angles sideways and
+  // may bury its end in the pedestal, which keeps the banana planted.
 
   group.userData = { character: 'banana', hitboxRadius: 0.5, eyeHeight: 1.1 }
   return group
