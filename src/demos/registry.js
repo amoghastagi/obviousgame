@@ -7,6 +7,7 @@ export const demos = {
   // Agent C (Physics & Gameplay): integrated game — WASD physics, raycast
   // shooting, bot AI. Placeholder arena until the graphics demos land.
   game: () => import('../game/gameDemo.js').then((m) => m.mount),
+  scene: () => import('./sceneDemo.js').then((m) => m.mount),
 }
 
 export async function mountDemo(key, container) {
