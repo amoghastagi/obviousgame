@@ -38,22 +38,29 @@ through the contract modules in `src/core/`; surfaces never import each other.
 | `core/hudStore.js` | `subscribe(fn)`, `getSnapshot()` | Reactive snapshot of latest health/ammo/weapon/leaderboard, kept current by bus subscriptions; resets on `match:start`. |
 | `data/loadout.js` | `CHARACTERS`, `WEAPONS`, `loadSelection()`, `setSelection()` | Fruit/weapon catalog (1–5 stat scales) and selection persistence (localStorage key `fruit-shockers-selection`). |
 
-### Surface stub signature
+### Surface contract
 
-Each surface currently ships as a stub with the **stable export signature the
-real implementations must keep**:
+Every surface exports the same stable signature, which the shell boots once:
 
 ```js
 export function init(rootEl) // render into rootEl; self-manage visibility
 ```
 
-A stub renders a small glass placeholder naming its surface and subscribes to
-`game:state` for its own visibility:
+Surfaces render their own DOM and subscribe to `game:state` for visibility;
+they read shared state through the contract modules and never import each
+other:
 
-- `ui/menu` — visible in `menu`; PLAY (demo) emits `ui:match:start`
-- `ui/hud` — visible in `playing` and `paused`; renders hudStore values
-- `ui/modals` — visible in `game_over` and `victory`; shows the `match:end`
-  summary with Retry (`ui:match:start`) and Quit (`ui:match:quit`) buttons
+- `ui/menu/` — visible in `menu`; character/weapon cards with a select →
+  confirm flow; PLAY persists the selection and emits `ui:match:start`;
+  re-entry (Back to menu) restores the persisted selection and re-focuses
+  the surface
+- `ui/hud/` — visible for the whole match session: `playing` and `paused`
+  (under the Esc pause veil), then `game_over`/`victory`, where the summary
+  modal dims + blurs it; renders hudStore values, plus bus-driven crosshair,
+  hitmarkers and the damage vignette
+- `ui/modals/` — visible in `game_over` and `victory`; shows the `match:end`
+  summary with Retry (`ui:match:start`) and Back to menu (`ui:match:quit`)
+  buttons; traps focus and restores it on close
 
 UI → game intent is always emitted on the bus (`ui:match:start`,
 `ui:match:quit`); `main.js` owns the mapping to `gameState` transitions.
@@ -63,10 +70,10 @@ UI → game intent is always emitted on the bus (`ui:match:start`,
 
 | Directory | Owner |
 | --- | --- |
-| `src/core/`, `src/data/`, `src/styles/` | UI foundation (this branch) — shared contracts & design system |
-| `src/ui/menu/` | Menu team (replaces the stub, keeps `init(rootEl)`) |
-| `src/ui/hud/` | HUD team (replaces the stub, keeps `init(rootEl)`) |
-| `src/ui/modals/` | Modal team (replaces the stub, keeps `init(rootEl)`) |
+| `src/core/`, `src/data/`, `src/styles/` | UI foundation — shared contracts & design system |
+| `src/ui/menu/` | Menu surface — keeps the `init(rootEl)` contract |
+| `src/ui/hud/` | HUD surface — keeps the `init(rootEl)` contract |
+| `src/ui/modals/` | Modal surface — keeps the `init(rootEl)` contract |
 | `src/graphics/`, `src/demos/` | 3D graphics team (palette + demo registry; `?demo=<key>` mounts into `#game-canvas`) |
 | `src/main.js` | UI foundation — boot + event glue; coordinate before editing |
 | `src/demo/mockGame.js` | **Temporary** mock match driver simulating a full match on the bus; deleted once the real engine emits the contract events |

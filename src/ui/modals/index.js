@@ -203,7 +203,10 @@ export function init(rootEl) {
     isOpen = false
     const el = previouslyFocused
     previouslyFocused = null
-    if (el && el.isConnected && !el.closest('[hidden]')) {
+    // Restore focus only to a meaningful, still-visible target. Mid-match the
+    // focus holder is document.body; restoring there would clobber the menu's
+    // own re-entry focus, which ran earlier in the same game:state broadcast.
+    if (el && el !== document.body && el.isConnected && !el.closest('[hidden]')) {
       el.focus({ preventScroll: true })
     }
   }
